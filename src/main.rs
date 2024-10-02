@@ -15,8 +15,9 @@ fn main() {
         if inputfile.exists() {
             match fs::read_to_string(inputfile) {
                 Ok(content) => {
-                    let brainfuck = Brainfuck::new(content, args.get(2));
-                    if let Err(e) = brainfuck.exec() {
+                    if let Err(e) =
+                        Brainfuck::new(&content, args.get(2).unwrap_or(&"".to_string())).exec()
+                    {
                         println!("{e}");
                     }
                 }
