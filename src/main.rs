@@ -1,6 +1,8 @@
 use std::{env, fs, path::Path, process};
 
 mod bf;
+mod memory;
+
 use bf::Brainfuck;
 
 fn main() {

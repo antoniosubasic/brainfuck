@@ -1,81 +1,60 @@
-use std::collections::VecDeque;
-
-struct Tape {
-    data: Vec<i128>,
-    pointer: usize,
-}
-
-impl Tape {
-    fn new() -> Self {
-        Self {
-            data: vec![0],
-            pointer: 0,
-        }
-    }
-}
+use crate::memory::Memory;
 
 pub struct Brainfuck {
-    tape: Tape,
-    ip: usize,
-    code: Vec<char>,
+    tape: Memory<i128>,
+    instruction: Memory<char>,
     input: Vec<char>,
-    loop_start: VecDeque<(usize, usize)>,
+    loop_start: Vec<(usize, usize)>,
 }
 
 impl Brainfuck {
     pub fn new(code: &String, input: &String) -> Self {
         Self {
-            tape: Tape::new(),
-            ip: 0,
-            code: code
-                .chars()
-                .filter(|c| vec!['<', '>', '+', '-', '.', ',', '[', ']'].contains(c))
-                .collect(),
+            tape: Memory::expanding(0),
+            instruction: Memory::fixed(
+                code.chars()
+                    .filter(|c| vec!['<', '>', '+', '-', '.', ',', '[', ']'].contains(c))
+                    .collect(),
+            ),
             input: input.chars().collect(),
-            loop_start: VecDeque::new(),
+            loop_start: vec![],
         }
     }
 
     pub fn exec(&mut self) -> Result<(), String> {
-        while self.ip < self.code.len() {
-            let instruction = self.code[self.ip];
+        loop {
+            let instruction = self.instruction.get_at_pointer()?;
 
             match instruction {
                 '<' => {
-                    if self.tape.pointer == 0 {
-                        self.tape.data.insert(0, 0);
-                    } else {
-                        self.tape.pointer -= 1;
-                    }
+                    self.tape.prev()?;
                 }
                 '>' => {
-                    if self.tape.pointer == self.tape.data.len() - 1 {
-                        self.tape.data.push(0);
-                    }
-
-                    self.tape.pointer += 1;
+                    self.tape.next()?;
                 }
                 '+' | '-' => {
-                    let is_add = instruction == '+';
+                    let is_add = *instruction == '+';
                     let operation = if is_add {
-                        self.tape.data[self.tape.pointer].checked_add(1)
+                        self.tape.get_at_pointer()?.checked_add(1)
                     } else {
-                        self.tape.data[self.tape.pointer].checked_sub(1)
+                        self.tape.get_at_pointer()?.checked_sub(1)
                     };
 
                     match operation {
-                        Some(value) => self.tape.data[self.tape.pointer] = value,
+                        Some(value) => {
+                            self.tape.set_at_pointer(value)?;
+                        }
                         None => {
                             return Err(format!(
                                 "value {} on tape at position: {}",
                                 if is_add { "overflow" } else { "underflow" },
-                                self.tape.pointer
+                                self.tape.get_pointer()
                             ));
                         }
                     }
                 }
                 '.' => {
-                    let value = self.tape.data[self.tape.pointer];
+                    let value = *self.tape.get_at_pointer()?;
 
                     if value >= u32::MIN as i128 && value <= u32::MAX as i128 {
                         if let Some(c) = std::char::from_u32(value as u32) {
@@ -88,25 +67,29 @@ impl Brainfuck {
                     }
                 }
                 ',' => {
-                    self.tape.data[self.tape.pointer] = if self.input.is_empty() {
+                    self.tape.set_at_pointer(if self.input.is_empty() {
                         0
                     } else {
                         self.input.remove(0) as i128
-                    };
+                    })?;
                 }
                 '[' => {
-                    self.loop_start.push_back((self.ip, self.tape.pointer));
+                    self.loop_start
+                        .push((self.instruction.get_pointer(), self.tape.get_pointer()));
                 }
-                ']' => match self.loop_start.back() {
-                    Some(&(ip, data_pointer)) => {
-                        if self.tape.data[data_pointer] > 0 {
-                            self.ip = ip;
+                ']' => match self.loop_start.last() {
+                    Some(&(instruction_pointer, tape_pointer)) => {
+                        if *self.tape.get_at(tape_pointer)? > 0 {
+                            self.instruction.set_pointer(instruction_pointer);
                         } else {
-                            self.loop_start.pop_back();
+                            self.loop_start.pop();
                         }
                     }
                     None => {
-                        return Err("reached loop-end without loop-start".to_string());
+                        return Err(format!(
+                            "unexpected ']' at {}",
+                            self.instruction.get_pointer()
+                        ));
                     }
                 },
                 _ => {
@@ -114,7 +97,16 @@ impl Brainfuck {
                 }
             }
 
-            self.ip += 1;
+            match self.instruction.next() {
+                Ok(_) => {}
+                Err(e) => {
+                    if e == "pointer overflow" {
+                        break;
+                    } else {
+                        return Err(e.to_string());
+                    }
+                }
+            }
         }
 
         Ok(())
