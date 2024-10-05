@@ -22,15 +22,15 @@ impl Brainfuck {
     }
 
     pub fn exec(&mut self) -> Result<(), String> {
-        loop {
-            let instruction = *self.instruction.get_at_pointer()?;
+        let mut instruction = *self.instruction.get_at_pointer()?;
 
+        loop {
             match instruction {
                 '<' => {
-                    self.tape.prev()?;
+                    self.tape.left()?;
                 }
                 '>' => {
-                    self.tape.next()?;
+                    self.tape.right()?;
                 }
                 '+' | '-' => {
                     let value = *self.tape.get_at_pointer()?;
@@ -64,9 +64,7 @@ impl Brainfuck {
                         let mut loops = 1;
 
                         while loops > 0 {
-                            self.instruction.next()?;
-
-                            match *self.instruction.get_at_pointer()? {
+                            match self.instruction.right()? {
                                 '[' => loops += 1,
                                 ']' => loops -= 1,
                                 _ => {}
@@ -94,8 +92,10 @@ impl Brainfuck {
                 }
             }
 
-            match self.instruction.next() {
-                Ok(_) => {}
+            match self.instruction.right() {
+                Ok(&instr) => {
+                    instruction = instr;
+                }
                 Err(e) => {
                     if e == "pointer overflow" {
                         break;
