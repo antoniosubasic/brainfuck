@@ -58,7 +58,21 @@ impl Brainfuck {
                     })?;
                 }
                 '[' => {
-                    self.loop_start.push(self.instruction.get_pointer());
+                    if *self.tape.get_at_pointer()? > 0 {
+                        self.loop_start.push(self.instruction.get_pointer());
+                    } else {
+                        let mut loops = 1;
+
+                        while loops > 0 {
+                            self.instruction.next()?;
+
+                            match *self.instruction.get_at_pointer()? {
+                                '[' => loops += 1,
+                                ']' => loops -= 1,
+                                _ => {}
+                            }
+                        }
+                    }
                 }
                 ']' => match self.loop_start.last() {
                     Some(&instruction_pointer) => {
