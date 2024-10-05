@@ -1,10 +1,10 @@
 use crate::memory::Memory;
 
 pub struct Brainfuck {
-    tape: Memory<i128>,
+    tape: Memory<u8>,
     instruction: Memory<char>,
     input: Vec<char>,
-    loop_start: Vec<(usize, usize)>,
+    loop_start: Vec<usize>,
 }
 
 impl Brainfuck {
@@ -23,7 +23,7 @@ impl Brainfuck {
 
     pub fn exec(&mut self) -> Result<(), String> {
         loop {
-            let instruction = self.instruction.get_at_pointer()?;
+            let instruction = *self.instruction.get_at_pointer()?;
 
             match instruction {
                 '<' => {
@@ -33,35 +33,19 @@ impl Brainfuck {
                     self.tape.next()?;
                 }
                 '+' | '-' => {
-                    let is_add = *instruction == '+';
-                    let operation = if is_add {
-                        self.tape.get_at_pointer()?.checked_add(1)
-                    } else {
-                        self.tape.get_at_pointer()?.checked_sub(1)
-                    };
+                    let value = *self.tape.get_at_pointer()?;
 
-                    match operation {
-                        Some(value) => {
-                            self.tape.set_at_pointer(value)?;
-                        }
-                        None => {
-                            return Err(format!(
-                                "value {} on tape at position: {}",
-                                if is_add { "overflow" } else { "underflow" },
-                                self.tape.get_pointer()
-                            ));
-                        }
-                    }
+                    self.tape.set_at_pointer(if instruction == '+' {
+                        value + 1
+                    } else {
+                        value - 1
+                    })?;
                 }
                 '.' => {
                     let value = *self.tape.get_at_pointer()?;
 
-                    if value >= u32::MIN as i128 && value <= u32::MAX as i128 {
-                        if let Some(c) = std::char::from_u32(value as u32) {
-                            print!("{c}");
-                        } else {
-                            return Err(format!("invalid unicode value: {}", value));
-                        }
+                    if let Some(c) = std::char::from_u32(value as u32) {
+                        print!("{c}");
                     } else {
                         return Err(format!("invalid unicode value: {}", value));
                     }
@@ -70,16 +54,15 @@ impl Brainfuck {
                     self.tape.set_at_pointer(if self.input.is_empty() {
                         0
                     } else {
-                        self.input.remove(0) as i128
+                        self.input.remove(0) as u8
                     })?;
                 }
                 '[' => {
-                    self.loop_start
-                        .push((self.instruction.get_pointer(), self.tape.get_pointer()));
+                    self.loop_start.push(self.instruction.get_pointer());
                 }
                 ']' => match self.loop_start.last() {
-                    Some(&(instruction_pointer, tape_pointer)) => {
-                        if *self.tape.get_at(tape_pointer)? > 0 {
+                    Some(&instruction_pointer) => {
+                        if *self.tape.get_at_pointer()? > 0 {
                             self.instruction.set_pointer(instruction_pointer);
                         } else {
                             self.loop_start.pop();
